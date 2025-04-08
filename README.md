@@ -41,7 +41,10 @@ src
 ## 🧠 핵심 개념 요약
 
 | 구성요소 | 역할 | 핵심 기능 |
-```yaml
+```makedown
+<pre><code> 
+| 구성요소 | 역할 | 핵심 기능 |
+|----------|------|------------|
 | `JwtAuthenticationFilter` | 로그인 시 동작 | 사용자 인증 → JWT 생성 및 반환 |
 | `JwtAuthorizationFilter` | 모든 요청 시 동작 | JWT 검증 → 사용자 인증 정보 SecurityContext에 저장 |
 | `SecurityConfig` | 전체 시큐리티 설정 | 필터 등록, URL 접근 권한 설정 |
@@ -49,6 +52,7 @@ src
 | `FilterConfig` | 커스텀 필터 예제 | 필터 순서 및 등록 방식 설명 |
 | `PrincipalDetails` | UserDetails 구현체 | 인증된 사용자 정보 보관 |
 | `PrincipalDetailService` | UserDetailsService 구현체 | DB에서 사용자 조회 |
+</code></pre>
 ```
 
 
