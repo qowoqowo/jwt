@@ -70,8 +70,77 @@ src
 
 ## 📌 주요 설정 정리
 
-### 🔐 SecurityConfig
+🔸 JwtAuthenticationFilter.java (로그인 처리)
+```java
+@Override
+public Authentication attemptAuthentication(HttpServletRequest request, HttpServletResponse response) {
+    ObjectMapper om = new ObjectMapper();
+    User user = om.readValue(request.getInputStream(), User.class);
 
+    UsernamePasswordAuthenticationToken authToken =
+        new UsernamePasswordAuthenticationToken(user.getUsername(), user.getPassword());
+
+    Authentication authentication = authenticationManager.authenticate(authToken);
+    return authentication;
+}
+```
+📌 로그인 요청 시 username/password를 검증하고 인증 수행
+
+```java
+@Override
+protected void successfulAuthentication(HttpServletRequest request, HttpServletResponse response,
+                                        FilterChain chain, Authentication authResult) {
+    String jwtToken = JWT.create()
+        .withSubject("cos토큰")
+        .withExpiresAt(new Date(System.currentTimeMillis() + JwtProperties.EXPIRATION_TIME))
+        .withClaim("id", principalDetails.getUser().getId())
+        .withClaim("username", principalDetails.getUser().getUsername())
+        .sign(Algorithm.HMAC512(JwtProperties.SECRET));
+
+    response.addHeader(JwtProperties.HEADER_STRING, JwtProperties.TOKEN_PREFIX + jwtToken);
+}
+
+```
+📌 인증 성공 시 JWT를 생성하고 응답 헤더에 추가합니다.
+
+🔸 JwtAuthorizationFilter (JWT 검증)
+```java
+@Override
+protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+        throws IOException, ServletException {
+
+    String jwtHeader = request.getHeader(JwtProperties.HEADER_STRING);
+
+    if (jwtHeader == null || !jwtHeader.startsWith(JwtProperties.TOKEN_PREFIX)) {
+        chain.doFilter(request, response);
+        return;
+    }
+
+    String jwtToken = jwtHeader.replace(JwtProperties.TOKEN_PREFIX, "");
+
+    String username = JWT.require(Algorithm.HMAC512(JwtProperties.SECRET))
+            .build()
+            .verify(jwtToken)
+            .getClaim("username")
+            .asString();
+
+    if (username != null) {
+        User userEntity = userRepository.findByUsername(username);
+        PrincipalDetails principalDetails = new PrincipalDetails(userEntity);
+
+        Authentication authentication = new UsernamePasswordAuthenticationToken(
+                principalDetails, null, principalDetails.getAuthorities());
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+    }
+
+    chain.doFilter(request, response);
+}
+
+```
+📌 요청 헤더에서 JWT를 추출하고 서명을 검증한 후, 정상적인 경우 Authentication 객체를 생성하여 SecurityContext에 저장합니다. 이 과정을 통해 Spring Security는 해당 요청을 인증된 사용자로 인식합니다.
+
+🔸 SecurityConfig.java (보안 설정)
 ```java
 http
     .csrf(csrf -> csrf.disable())
@@ -87,69 +156,77 @@ http
         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
         .anyRequest().permitAll()
     );
+
 ```
-🌐 CorsConfig
+📌 Stateless 인증 구조로 설정 + 필터 등록 + 접근 권한 설정
+
+🔸 CorsConfig (CORS 허용)
 ```java
 config.setAllowCredentials(true);
 config.addAllowedOrigin("*");
 config.addAllowedHeader("*");
 config.addAllowedMethod("*");
 ```
-✅ CORS는 프론트에서 Authorization 헤더나 쿠키 등을 보낼 수 있도록 설정
+📌 모든 Origin/CORS 요청 허용 (운영 환경에서는 addAllowedOrigin("http://your-frontend.com") 식으로 제한하는 게 좋습니다.)
 
-🧪 필터 순서 확인용 예제 (MyFilter1, MyFilter2, MyFilter3)
-FilterConfig.java에 등록된 필터는 순서대로 실행되며,
-Spring Security의 필터보다 먼저 또는 이후로 동작하게 설정할 수 있습니다.
+🔸 MyFilter3.java (테스트용 필터 예제)
 ```java
-@Bean
-FilterRegistrationBean<MyFilter1> filter1() {
-    FilterRegistrationBean<MyFilter1> bean = new FilterRegistrationBean<>(new MyFilter1());
-    bean.addUrlPatterns("/*");
-    bean.setOrder(1);
-    return bean;
+if(req.getMethod().equals("POST")) {
+    String headerAuth = req.getHeader("Authorization");
+
+    if(headerAuth.equals("cos")) {
+        chain.doFilter(req, res);
+    } else {
+        res.getWriter().println("인증안됨");
+    }
 }
 ```
+📌 학습용 테스트 필터. 실서비스에서는 사용하지 않음
 
-🧬 기술 스택
-Java 17
-
-Spring Boot 3.4.4
-
-Spring Security
-
-JWT
-
-Lombok
-
-MySQL 
-
-✅ 테스트 계정 예시
+🔑 테스트 계정 예시
 ```json
+POST /login
 {
   "username": "testuser",
   "password": "1234"
 }
 ```
-📮 API 인증 방식
-모든 인증된 요청에는 다음과 같은 헤더를 포함해야 합니다:
-```html
+요청 성공 시, 응답 헤더에 아래와 같은 JWT가 포함됩니다.
+```
 Authorization: Bearer <your_jwt_token>
 ```
+이후 모든 API 요청 시 이 헤더를 포함해야 인증됩니다.
+
+🚀 실행 방법
+1. application.yml에 MySQL DB 설정
+
+2. 프로젝트 실행
+
+3. Postman 또는 프론트엔드에서 /login 요청
+
+4. 응답 헤더의 JWT 토큰 → 이후 요청에 포함
+
+5. API 권한별 접근 필터링 확인
+
+🧬 기술 스택
+- Java 17
+
+- Spring Boot 3.4.4
+
+- Spring Security
+
+- JWT (java-jwt 라이브러리)
+
+- Lombok
+
+- MySQL
+
 ✨ 기타 참고
-UserDetails, UserDetailsService는 Spring Security에서 인증 정보를 보관하고 검증하기 위한 핵심 인터페이스입니다.
+UserDetails, UserDetailsService는 Spring Security의 인증 기반 클래스입니다.
 
-JWT는 기본적으로 서버에 상태를 저장하지 않기 때문에 완전한 Stateless 인증 구조를 구현할 수 있습니다.
+JWT 기반 인증은 서버에 인증 상태를 저장하지 않기 때문에 Stateless 구조에 적합합니다.
 
-필터 체인을 이해하면 인증/인가뿐만 아니라 로깅, 트래픽 제어 등 다양한 커스터마이징이 가능해집니다.
-
-📎 실행 방법
-application.yml 설정
-
-DB 및 User 엔티티 설정
-
-Postman 또는 프론트에서 /login으로 JWT 발급 요청
-
-이후 모든 요청에 JWT 포함하여 호출
+필터 체인을 이해하면 인증뿐 아니라 로깅, 모니터링, 권한 체크 등의 확장도 가능합니다.
 
 💬 Author
 👨‍💻 이 프로젝트는 JWT 기반 인증 학습 및 실습용으로 제작되었습니다.
