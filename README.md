@@ -140,6 +140,15 @@ protected void doFilterInternal(HttpServletRequest request, HttpServletResponse 
 ```
 📌 요청 헤더에서 JWT를 추출하고 서명을 검증한 후, 정상적인 경우 Authentication 객체를 생성하여 SecurityContext에 저장합니다. 이 과정을 통해 Spring Security는 해당 요청을 인증된 사용자로 인식합니다.
 
+🔸 JwtProperties (JWT 설정 상수들)
+```java
+public interface JwtProperties {
+	String SECRET = "cos"; // 우리 서버만 알고 있는 비밀값
+	int EXPIRATION_TIME = 1000 * 60 * 10; // 10분
+	String TOKEN_PREFIX = "Bearer ";
+	String HEADER_STRING = "Authorization";
+}
+```
 🔸 SecurityConfig.java (보안 설정)
 ```java
 http
